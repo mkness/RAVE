@@ -42,7 +42,7 @@ pastel_label_names = {
 label_limits = {
     "TEFF": (3000, 8000),
     "LOGG": (0, 5),
-    "FE_H": (-2, 0.75)
+    "FE_H": (-3, 0.75)
 }
 
 latex_labels = {
@@ -51,13 +51,15 @@ latex_labels = {
     "FE_H": r"$[{\rm Fe/H}]$"
 }
 
+"""
 exclude_comparisons = ("2013MNRAS.429..126R", )
 ok = np.ones(len(data_table), dtype=bool)
 for bibcode in exclude_comparisons:
     ok *= (data_table["bibcode"] != bibcode)
+"""
 
 # Exclude ones we think are bad.
-ok *= data_table["OK"]
+ok = data_table["OK"]
 
 data_table = data_table[ok]
 
@@ -105,8 +107,8 @@ for i, (ax, label_name) in enumerate(zip(axes, label_names)):
             c=colors[j], alpha=0.75, marker=(3, 1, angles[j]), s=50, 
             linewidths=0.5, edgecolors="#000000")
 
-    ax.set_xlim(limits[label_name])
-    ax.set_ylim(limits[label_name])
+    ax.set_xlim(label_limits[label_name])
+    ax.set_ylim(label_limits[label_name])
     ax.xaxis.set_major_locator(MaxNLocator(6))
     ax.yaxis.set_major_locator(MaxNLocator(6))
     ax.set_xlabel(" ".join([latex_labels[label_name], r"$({\rm UNRAVE})$"]))
@@ -118,4 +120,4 @@ for i, (ax, label_name) in enumerate(zip(axes, label_names)):
 fig.tight_layout()
 
 fig.savefig("literature-comparison.pdf", dpi=300)
-fig.savefig("literature-comparison.png", dpi=300)
+fig.savefig("literature-comparison.png")

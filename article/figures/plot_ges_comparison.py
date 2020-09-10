@@ -9,11 +9,15 @@ try:
     data_table
 
 except NameError:
-    from rave_io import (rave_cannon_dr1, ges_idr4)
+    from rave_io import (get_cannon_dr1, get_ges_idr4)
 
     from astropy.table import join
+    dr1 = get_cannon_dr1()
+    #dr1["TEFF"] = dr1["EPIC_TEFF"]
+    #dr1["LOGG"] = dr1["EPIC_LOGG"]
+    #dr1["FE_H"] = dr1["EPIC_FEH"]
 
-    data_table = join(rave_cannon_dr1, ges_idr4, keys=("Name", ))
+    data_table = join(dr1, get_ges_idr4(), keys=("Name", ))
 
 else:
     print("Warning: Using pre-loaded data!")
@@ -21,7 +25,7 @@ else:
 
 # Plot labels against literature.
 
-label_names = ("TEFF_1", "LOGG_2", "FE_H")
+label_names = ("TEFF_1", "LOGG_1", "FE_H")
 ges_label_names = {
     "TEFF_1": "TEFF_2",
     "LOGG_1": "LOGG_2",
@@ -29,7 +33,7 @@ ges_label_names = {
 }
 
 label_limits = {
-    "TEFF_1": (3000, 8000),
+    "TEFF_1": (3500, 7000),
     "LOGG_1": (0, 5),
     "FE_H": (-2, 0.75)
 }
@@ -42,7 +46,9 @@ latex_labels = {
 
 
 # Exclude ones we think are bad.
-ok = data_table["OK"]
+#ok = data_table["OK"] 
+ok = data_table["QC"]
+#ok *= np.isfinite(data_table["TEFF_1"] * data_table["TEFF_2"] * data_table["LOGG_1"] * data_table["LOGG_2"] * data_table["FE_H"] * data_table["FEH"])
 
 data_table = data_table[ok]
 
@@ -64,25 +70,61 @@ fig.subplots_adjust(
 
 for i, (ax, label_name) in enumerate(zip(axes, label_names)):
 
-    x = data_table[label_name]
-    #xerr
-    y = data_table[ges_label_names[label_name]]
+    y = data_table[label_name]
+    xerr = data_table["E_{}".format(label_name)]
+    xerr[xerr == 0] = np.nan
+
+    x = data_table[ges_label_names[label_name]]
+    yerr = data_table["E_{}".format(ges_label_names[label_name])]
     # yerr
+    c = data_table["snr"]
 
-    ax.scatter(x, y, c=data_table["SNRK"], alpha=0.75, s=50, 
-        linewidths=0.5, edgecolors="#000000")
+    uves = np.array([_.startswith("u") for _ in data_table["FILENAME"]])
 
-    ax.set_xlim(limits[label_name])
-    ax.set_ylim(limits[label_name])
+    #scat = ax.scatter(x[uves], y[uves], c=data_table["snr"][uves], s=75, marker="s", vmin=np.nanmin(data_table["snr"]), vmax=np.nanmax(data_table["snr"]), cmap="plasma")
+    #ax.scatter(x[~uves], y[~uves], c=data_table["snr"][~uves], s=75, marker="o", vmin=np.nanmin(data_table["snr"]), vmax=np.nanmax(data_table["snr"]), cmap="plasma") 
+    ax.errorbar(x, y, xerr=xerr, yerr=yerr, fmt=None, ecolor="#666666", zorder=-1)
+    scat = ax.scatter(x, y, c=data_table["snr"], s=75, cmap="plasma")
+
+    limits = label_limits[label_name]
+    ax.plot(limits, limits, c="#666666", linestyle=":", zorder=-1)
+
+    Nstars = np.isfinite(x*y).sum()
+    ax.text(0.05, 0.90, r"${:.0f}$".format(Nstars) + r" ${\rm stars}$",
+        transform=ax.transAxes)
+
+    if label_name.startswith("TEFF"):
+        ax.text(0.05, 0.82, r"${\rm Bias:}$ " + r"${:.0f}$".format(np.nanmean(y-x)) + r" ${\rm K}$",
+            transform=ax.transAxes)
+        ax.text(0.05, 0.74, r"${\rm RMS:}$ " + r"${0:.0f}$".format(np.nanstd(y-x)) + r" ${\rm K}$",
+            transform=ax.transAxes)
+    else:
+        ax.text(0.05, 0.82, r"${\rm Bias:}$ " + r"${0:.2f}$".format(np.nanmean(y-x)) + r" ${\rm dex}$",
+            transform=ax.transAxes)
+        ax.text(0.05, 0.74, r"${\rm RMS:}$ " + r"${0:.2f}$".format(np.nanstd(y-x)) + r" ${\rm dex}$",
+            transform=ax.transAxes)
+
+    ax.set_xlim(limits)
+    ax.set_ylim(limits)
     ax.xaxis.set_major_locator(MaxNLocator(6))
     ax.yaxis.set_major_locator(MaxNLocator(6))
-    ax.set_xlabel(" ".join([latex_labels[label_name], r"$({\rm UNRAVE})$"]))
-    ax.set_ylabel(" ".join([latex_labels[label_name], r"$({\rm GES})$"]))
+    ax.set_ylabel(" ".join([latex_labels[label_name], r"$({\rm \it{RAVE}}{\rm -on})$"]))
+    ax.set_xlabel(" ".join([latex_labels[label_name], r"$({\rm GES})$"]))
 
-    [_.set_rotation(30) for _ in ax.get_xticklabels()]
-    [_.set_rotation(30) for _ in ax.get_yticklabels()]
+
+    diff = y - x
+    print(label_name, np.nanmean(diff), np.nanstd(diff))
+
+#cbar = plt.colorbar(scat)
+#cbar.set_label(r"$S/N$")
 
 fig.tight_layout()
 
+
+cbar = plt.colorbar(scat, cax=fig.add_axes([0.93,fig.subplotpars.bottom,0.02,0.9 - fig.subplotpars.bottom]))
+cbar.set_label(r"${\rm RAVE}$ $S/N$ $[{\rm pixel}^{-1}]$")
+
+fig.subplots_adjust(top=0.90, right=0.91)
+
 fig.savefig("ges-comparison.pdf", dpi=300)
-fig.savefig("ges-comparison.png", dpi=300)
+fig.savefig("ges-comparison.png")

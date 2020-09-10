@@ -13,17 +13,18 @@ try:
     combined_table
 
 except NameError:
-    from rave_io import (rave_kordopatis_dr4, rave_cannon_dr1)
+    from rave_io import (get_rave_kordopatis_dr4, get_cannon_dr1)
 
     from astropy.table import join
 
-    combined_table = join(rave_cannon_dr1, rave_kordopatis_dr4, keys=("Name", ))
+    combined_table = join(get_cannon_dr1(), get_rave_kordopatis_dr4(), keys=("Name", ))
 
 else:
     print("Warning: Using pre-loaded data!")
 
-QC = combined_table["OK"] * (combined_table["QK"] == 0)
-combined_table = combined_table[QC]
+QC =  (combined_table["QC"]) \
+    * (combined_table["TeffK"] > 4000) * (combined_table["c1_1"] == "n") * (combined_table["c2_1"] == "n") \
+    * (combined_table["c3_1"] == "n") * (combined_table["e_HRV"] < 8)
 
 N_bins = 50
 
@@ -31,15 +32,14 @@ all_columns = [
     # RAVE label, DR4 label
     ("TEFF", "TeffK"),
     ("LOGG", "loggK"),
-    ("FE_H", "__M_H_K"),
+    ("FE_H", "c_M_H_K"),
 ]
 label_limits = {
-    "TEFF": (3000, 8000),
-    "LOGG": (0, 5),
-    "FE_H": (-2, 0.75)
+    "TEFF": (3500, 7500),
+    "LOGG": (0, 5.5),
+    "FE_H": (-2.5, 0.5)
 }
 latex_labels = (r"$T_{\rm eff}$", r"$\log{g}$", r"$[{\rm Fe/H}]$")
-
 
 
 K, factor = (len(all_columns), 3.5)
@@ -60,28 +60,33 @@ for i, (ax, columns, latex_label) in enumerate(zip(axes, all_columns, latex_labe
 
     cannon_label, dr4_label = columns
 
-    x = combined_table[cannon_label]._data
-    y = combined_table[dr4_label]._data
+    x = combined_table[cannon_label]._data[QC]
+    y = combined_table[dr4_label]._data[QC]
     
     finite = np.isfinite(x*y)
     limits = label_limits[cannon_label]
     bins = np.linspace(limits[0], limits[1], N_bins + 1)
-    ax.set_axis_bgcolor("#CCCCCC")
-    ax.hist2d(x[finite], y[finite], bins=(bins, bins), norm=LogNorm(),
-        cmap="viridis")
+    cmap = matplotlib.cm.Blues
+    ax.set_axis_bgcolor(cmap(0))
+    ax.hist2d(y[finite], x[finite], bins=(bins, bins), norm=LogNorm(),
+        cmap=cmap)
 
+    ax.plot(limits, limits, c="#CCCCCC", linestyle=":")
     # Common limits, labels.
     ax.set_xlim(limits)
     ax.set_ylim(limits)
     ax.xaxis.set_major_locator(MaxNLocator(6))
     ax.yaxis.set_major_locator(MaxNLocator(6))
-    ax.set_xlabel(" ".join([latex_label, r"$({\rm UNRAVE})$"]))
-    ax.set_ylabel(" ".join([latex_label, r"$({\rm RAVE}$ ${\rm DR4})$"]))
+    ax.set_ylabel(" ".join([latex_label, r"$({\rm \it{RAVE}}{\rm -on})$"]))
+    ax.set_xlabel(" ".join([latex_label, r"$({\rm RAVE}$ ${\rm DR4})$"]))
 
-    [_.set_rotation(30) for _ in ax.get_xticklabels()]
-    [_.set_rotation(30) for _ in ax.get_yticklabels()]
+    diff = y - x
+    print(latex_labels, np.nanmean(diff), np.nanstd(diff))
 
+axes[0].set_xticks([4000, 5000, 6000, 7000])
+axes[0].set_yticks([4000, 5000, 6000, 7000])
+axes[-1].set_xlabel(" ".join([r"$[{\rm M/H}]$", r"$({\rm RAVE}$ ${\rm DR4})$"]))
 fig.tight_layout()
 
 fig.savefig("dr4-comparison.pdf", dpi=300)
-fig.savefig("dr4-comparison.png", dpi=300)
+fig.savefig("dr4-comparison.png")
